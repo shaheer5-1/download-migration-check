@@ -1,0 +1,8 @@
+﻿Order Number,Buyer Email,Product Name,SKU,Asset ID
+1001,repeat@maple.example,Watercolor Kit,WK,new-1001
+1003,wrong@other.example,Brush Set,BS,new-1003
+, case@maple.example ,"Café, été",cafe,new-1004
+5,,Journal,JR,new-1005
+1006,customer@maple.example,Layer Pack,LP,new-1006
+1007,,Presets,PS,new-1007
+,alias@maple.example,Guide,GD,new-1008

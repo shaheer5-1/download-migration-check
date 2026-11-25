@@ -1,0 +1,14 @@
+﻿Order Number,Buyer Email,Product Name,SKU,Asset ID
+1001,bundle@cedar.example,Pattern PDF,PAT,old-pdf
+1001,bundle@cedar.example,Pattern SVG,PAT,old-svg
+1002,formats@cedar.example,Pattern,PDF,old-format-pdf
+1002,formats@cedar.example,Pattern,SVG,old-format-svg
+1003,partial@cedar.example,Paid Download,PD,old-paid
+1003,partial@cedar.example,Refunded Download,RD,old-refunded
+1004,cancel@cedar.example,Cancelled Download,CD,old-cancelled
+1005,refund@cedar.example,Fully Refunded,FR,old-full-refund
+1006,duplicate@cedar.example,Duplicate Export Line,DUP,old-dupe
+1006,duplicate@cedar.example,Duplicate Export Line,DUP,old-dupe
+1007,,Anonymous Download,ANON,old-anon
+1008,two-assets@cedar.example,Photo Bundle,BUNDLE,old-jpg
+1008,two-assets@cedar.example,Photo Bundle,BUNDLE,old-raw

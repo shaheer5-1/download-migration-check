@@ -1,0 +1,12 @@
+Order ID,Date,State,Gateway,Buyer Name,Buyer Email,Product,Product ID,Price,Currency,Refunded,Download Count
+83110421,2025-03-04 14:14,complete,Shopify,Redacted,avery@example.test,Studio Preset Pack,2210551,29.00,USD,false,3
+83110517,2025-03-09 17:02,complete,Shopify,Redacted,blake@example.test,Brand Brief Template,2210552,19.00,USD,false,1
+83112003,2025-04-11 20:40,complete,Shopify,Redacted,casey@example.test,Freelance Pricing Guide,2210553,24.00,USD,true,2
+83113880,2025-05-02 12:01,complete,Shopify,Redacted,drew@example.test,Launch Checklist,2210554,12.00,USD,false,0
+83115120,2025-06-19 01:12,complete,Shopify,Redacted,emery@example.test,Brand Brief Template,2210552,19.00,USD,false,1
+83116002,2025-07-07 10:20,complete,Stripe,Redacted,finley@example.test,Launch Checklist,2210554,12.00,USD,false,1
+83117200,2025-08-01 14:00,complete,Shopify,Redacted,gray@example.test,Launch Checklist,2210554,12.00,USD,false,1
+83118333,2025-09-14 18:30,complete,Shopify,Redacted,harper@example.test,Brand Brief Template,2210552,19.00,USD,false,1
+83118333,2025-09-14 18:30,complete,Shopify,Redacted,harper@example.test,"Social Templates, Vol. 2",2210557,15.00,USD,false,1
+83119001,2025-10-01 15:11,complete,Shopify,Redacted,indigo@example.test,Launch Checklist,2210554,12.00,USD,true,0
+83119920,2025-10-20 13:45,complete,Shopify,Redacted,jules@example.test,Studio Preset Pack,2210551,29.00,USD,false,2
