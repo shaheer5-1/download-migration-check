@@ -53,6 +53,11 @@ function productKeys(row: Row) {
 const productName = (row: Row) => normalize(row.product && row.variant && !normalize(row.product).endsWith(` - ${normalize(row.variant)}`)
   ? `${row.product} - ${row.variant}` : row.product);
 
+function variantConflicts(name: string, variant: string, otherName: string) {
+  const suffix = ` - ${variant}`;
+  return !!variant && name.endsWith(suffix) && otherName.startsWith(`${name.slice(0, -suffix.length)} - `) && name !== otherName;
+}
+
 function productStrength(a: Row, b: Row) {
   const nameA = productName(a);
   const nameB = productName(b);
@@ -60,11 +65,10 @@ function productStrength(a: Row, b: Row) {
   if (a.sku && b.sku) {
     if (normalize(a.sku) !== normalize(b.sku)) return 0;
     if (sameName) return 2;
-    const variantA = nameA.lastIndexOf(' - ');
-    const variantB = nameB.lastIndexOf(' - ');
-    if ((a.variant && b.variant && normalize(a.variant) !== normalize(b.variant)) ||
-        ((a.variant || b.variant) && variantA >= 0 && variantB >= 0 &&
-          nameA.slice(0, variantA) === nameB.slice(0, variantB))) return 0;
+    const variantA = normalize(a.variant);
+    const variantB = normalize(b.variant);
+    if ((variantA && variantB && variantA !== variantB) ||
+        variantConflicts(nameA, variantA, nameB) || variantConflicts(nameB, variantB, nameA)) return 0;
     return 1;
   }
   if (sameName) return 2;
