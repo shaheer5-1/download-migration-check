@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { audit } from './audit';
-import { checkSlot, decodeCsv, detectSource, missingFields, parseCsv, storeMismatch, type Source } from './csv';
+import { checkSlot, decodeCsv, detectSource, mappedRows, missingFields, parseCsv, storeMismatch, type Source } from './csv';
 import { exportReport } from './report';
 
 function read(name: string) {
@@ -17,6 +17,18 @@ describe('messy tester fixtures', () => {
   it.each(['shopify-semicolon', 'shopify-tab-delimited', 'shopify-excel-sep-directive', 'shopify-excel-utf16le',
     'shopify-excel-utf8-bom-crlf-quotes', 'shopify-empty-and-whitespace-rows'])('reads %s with the same baseline counts', orders => {
     expect(run({ orders })).toMatchObject({ buyersChecked: 4, atRiskBuyers: 2 });
+  });
+
+  it.each([
+    ['shopify-empty-and-whitespace-rows', '7'],
+    ['shopify-excel-sep-directive', '6'],
+  ])('reports the physical source line in %s', (orders, line) => {
+    expect(run({ orders }).findings.find(row => row.sku === 'PRICING')?.record).toBe(line);
+  });
+
+  it('counts physical lines inside quoted records without splitting the field', () => {
+    const parsed = parseCsv('\uFEFFsep=;\r\nOrder Number;Product\r\n42;"First\r\nproduct"\r\n43;Second', 'new.csv', 'next');
+    expect(mappedRows(parsed).map(({ csvRow, product }) => [csvRow, product])).toEqual([[3, 'First\r\nproduct'], [5, 'Second']]);
   });
 
   it.each(['new-renamed-email-address', 'new-email-case-padding', 'new-header-case-spaces', 'new-duplicates'])('matches %s with baseline counts', next => {

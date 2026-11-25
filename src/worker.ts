@@ -2,7 +2,7 @@ import { audit, type Finding, type Report } from './audit';
 import { checkSlot, decodeCsv, parseCsv, storeMismatch, type Dataset, type Mapping, type Source } from './csv';
 import { exportReport, filterRows, type ExportKind, type ReportSummary, type RunContext } from './report';
 
-export type FileInfo = Omit<Dataset, 'rows'> & { rowCount: number };
+export type FileInfo = Omit<Dataset, 'rows' | 'rowLines'> & { rowCount: number };
 export type Request =
   | { type: 'load'; source: Source; version: number; file: File | string; name: string }
   | { type: 'clear'; source: Source; version: number }
@@ -37,7 +37,7 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
       const file = parseCsv(text, data.name, source);
       checkSlot(file, source);
       datasets[source] = file;
-      const { rows, ...metadata } = file;
+      const { rows, rowLines, ...metadata } = file;
       send({ type: 'loaded', source, version, info: { ...metadata, rowCount: rows.length } });
     } catch (error) {
       if (versions[source] === version) send({ type: 'loadError', source, version, message: error instanceof Error ? error.message : 'Could not read this CSV.' });

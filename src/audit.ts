@@ -195,7 +195,7 @@ const buyerKey = (row: Row) => row.email ? key('email', normalize(row.email)) : 
 const orderKey = (row: Row) => orderNumber(row.order || row.orderId) || key('row', String(row.csvRow));
 const validProduct = (row: Row) => !!(row.product || row.sku);
 const validPurchase = (row: Row) => validProduct(row) && !!(row.order || row.orderId || row.email);
-const validRowWidth = (file: Dataset, row: Row) => file.rows[row.csvRow - 2].length === file.headers.length;
+const validRowWidth = (file: Dataset, row: Row) => file.rows[row.rowIndex].length === file.headers.length;
 const sourceRecord = (row: Row) => String(row.csvRow);
 const outsideShopify = (row: Row) => !!row.gateway && !normalize(row.gateway).includes('shopify');
 
