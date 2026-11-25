@@ -207,6 +207,25 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
   }
 
   const claims = new Map<Row, Map<string, number>>();
+  let purchasesByEmail: Map<string, Row[]> | undefined;
+  const hasOtherPurchase = (row: Row, entitlement: Row) => {
+    if (!purchasesByEmail) {
+      purchasesByEmail = new Map();
+      for (const purchase of lineItems) {
+        if (!purchase.email || !(purchase.order || purchase.orderId) || !validRowWidth(orders, purchase)) continue;
+        for (const product of productKeys(purchase)) {
+          const id = key(normalize(purchase.email), product);
+          const bucket = purchasesByEmail.get(id);
+          if (bucket) bucket.push(purchase);
+          else purchasesByEmail.set(id, [purchase]);
+        }
+      }
+    }
+    const email = normalize(entitlement.email);
+    const purchase = orderKey(row);
+    return productKeys(entitlement).some(product => purchasesByEmail?.get(key(email, product))?.some(other =>
+      orderKey(other) !== purchase && productStrength(other, entitlement) > 0));
+  };
   const linked = new Set<Row>();
   const partialDigitalCount = new Map<string, number>();
   const duplicateKey = (row: Row) => key(orderKey(row), normalize(row.email), productName(row), normalize(row.sku),
@@ -264,6 +283,7 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     const oldAssets = unique(old.map(asset => asset.assetId).filter(Boolean));
     const available = next.matches.filter(match => !differentEmail(target, match.row) &&
       (newApp.mapping.access === undefined || enabled(match.row.access)) &&
+      (match.by !== 'Email' || !hasOtherPurchase(row, match.row)) &&
       [...(claims.get(match.row)?.entries() ?? [])].every(([other, strength]) => other === line || strength < match.strength));
     const conflict = old.filter(asset => differentEmail(row, asset));
     const newConflict = next.matches.filter(match => differentEmail(target, match.row));
