@@ -235,7 +235,12 @@ function indexProducts(rows: Row[]) {
 }
 
 export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report {
-  const oldRows = mappedRows(oldApp).filter(row => validPurchase(row) && validRowWidth(oldApp, row));
+  const oldRows: Row[] = [];
+  const skippedOldRows: Row[] = [];
+  for (const row of mappedRows(oldApp)) {
+    const valid = validPurchase(row) && validRowWidth(oldApp, row);
+    (valid ? oldRows : skippedOldRows).push(row);
+  }
   const lineItems = shopifyLineItems(mappedRows(orders));
   const catalog = isCatalog(newApp.mapping);
   const newRows: Row[] = [];
@@ -257,7 +262,7 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     shopifyRows: lineItems.length, shopifyOrders: new Set(lineItems.filter(row => row.order || row.orderId).map(orderKey)).size,
     checkedRows: 0, withoutOld: 0, excludedStatus: 0, unknownStatus: 0, unidentified: 0, duplicates: 0,
     oldRows: oldApp.rows.length, unmatchedOld: 0, oldBuyers: new Set(oldRows.map(buyerKey)).size,
-    invalidOld: oldApp.rows.length - oldRows.length, invalidNew: skippedNewRows.length,
+    invalidOld: skippedOldRows.length, invalidNew: skippedNewRows.length,
   };
   const hasOrderProduct = indexProducts(lineItems);
   const productMatches = new Map<string, boolean>();
@@ -332,7 +337,7 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
       scope.excludedStatus++;
       return [];
     }
-    if (!old.length) {
+    if (!old.length && !skippedOldRows.some(skipped => couldMatchSkippedRow(row, skipped))) {
       if (!unknown) scope.withoutOld++;
       return [];
     }
@@ -343,7 +348,7 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     if (!unknown) scope.checkedRows++;
     const target = { ...row, email: row.email || (unique(old.map(asset => normalize(asset.email)).filter(Boolean)).length === 1
       ? old.find(asset => asset.email)?.email ?? '' : '') };
-    const next = newIndex(target);
+    const next = old.length ? newIndex(target) : { matches: [], alternatives: [] };
     const line = key(orderKey(target), normalize(target.email), normalize(row.sku), normalize(row.product));
     for (const match of next.matches) {
       const byLine = claims.get(match.row) ?? new Map();
@@ -376,6 +381,8 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
       reason = `${duplicates.length} Shopify records look identical; confirm quantity and whether they are duplicate export rows.`;
     } else if (financial === 'partially_refunded' && (partialDigitalCount.get(orderKey(row))! > 1 || Number(row.quantity) > 1)) {
       reason = 'Partially refunded order has multiple digital downloads; Shopify does not identify the refunded download in this export.';
+    } else if (!old.length) {
+      reason = 'A skipped row in the old export may match this purchase; check a complete export before restoring.';
     } else if (conflict.length) {
       reason = 'Shopify and the old app disagree on the buyer email.';
       candidates = [...conflict, ...candidates];

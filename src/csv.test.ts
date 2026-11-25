@@ -88,10 +88,24 @@ describe('messy tester fixtures', () => {
     expect(exportReport(report, context, 'summary')).toContain('skipped');
   });
 
-  it('keeps a truncated old row in the skipped count without inventing an entitlement', () => {
+  it('reviews a possible match from a truncated old row without inventing an entitlement', () => {
+    const baseline = run();
     const report = run({ old: 'old-one-truncated-entitlement-row' });
-    expect(report).toMatchObject({ buyersChecked: 3, atRiskBuyers: 1, scope: { invalidOld: 1 } });
-    expect(report.findings.some(row => row.order === '#1045')).toBe(false);
+    expect(baseline.findings.filter(row => row.status === 'At risk').map(row => row.order)).toEqual(['#1044', '#1045']);
+    expect(report).toMatchObject({ buyersChecked: 4, coveredBuyers: 2, reviewBuyers: 1, atRiskBuyers: 1,
+      scope: { invalidOld: 1, checkedRows: 5, withoutOld: 1 } });
+    expect(report.findings.filter(row => row.order === '#1045')).toEqual([expect.objectContaining({
+      origin: 'Shopify', status: 'Review', matchedBy: '', reason: expect.stringContaining('skipped row in the old export'),
+    })]);
+    const context = { store: 'Test', date: '2026-11-25', files: ['old.csv', 'new.csv', 'orders.csv'] };
+    const risk = exportReport(report, context, 'risk');
+    expect(risk).toContain('#1044');
+    expect(risk).not.toContain('#1045');
+    expect(risk).toContain('Old export has 1 skipped row');
+    const review = exportReport(report, context, 'review');
+    expect(review).toMatch(/#1045[^\r\n]*Needs review/);
+    expect(review).toContain('Old export has 1 skipped row');
+    expect(exportReport(report, context, 'summary')).toContain('Old export has 1 skipped row');
   });
 
   it.each(['shopify-refunded', 'shopify-voided', 'shopify-canceled'])('excludes %s from restoration', orders => {
