@@ -313,7 +313,7 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
         status = 'At risk';
         reason = 'No matching file is configured in the new variant-to-file export.';
       }
-    } else if (oldAssets.length > 1 && !sameAssetIds) {
+    } else if (oldAssets.length > 1 && !sameAssetIds && newApp.rows.length) {
       reason = 'Multiple old files share this line item; the new file IDs do not verify all of them.';
     } else if (available.length) {
       status = 'Covered';
