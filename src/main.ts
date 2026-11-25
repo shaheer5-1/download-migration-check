@@ -220,7 +220,7 @@ let pageToken = 0;
 
 function renderReport(report: ReportSummary, context: RunContext) {
   const metrics = [
-    ['Buyers checked', report.buyersChecked, 'Paid orders with old access', 'neutral'],
+    ['Buyers checked', report.buyersChecked, report.scope.invalidOld ? 'Paid orders with matching or possible old download records' : 'Paid orders with old access', 'neutral'],
     ['Covered', report.coveredBuyers, 'All checked downloads matched', 'green'],
     ['At risk', report.atRiskBuyers, 'At least one download missing', 'amber'],
     ['Needs review', report.reviewBuyers, 'Coverage not verified', 'amber'],
