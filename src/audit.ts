@@ -184,6 +184,7 @@ const validProduct = (row: Row) => !!(row.product || row.sku);
 const validPurchase = (row: Row) => validProduct(row) && !!(row.order || row.orderId || row.email);
 const validRowWidth = (file: Dataset, row: Row) => file.rows[row.csvRow - 2].length === file.headers.length;
 const sourceRecord = (row: Row) => String(row.csvRow);
+const outsideShopify = (row: Row) => !!(row.externalOrder && row.gateway && !normalize(row.gateway).includes('shopify'));
 
 export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report {
   const oldRows = mappedRows(oldApp).filter(row => validPurchase(row) && validRowWidth(oldApp, row));
@@ -191,7 +192,7 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
   const catalog = isCatalog(newApp.mapping);
   const newRows = mappedRows(newApp).filter(row => validRowWidth(newApp, row) &&
     (catalog ? validProduct(row) && !!(row.file || row.assetId) : validPurchase(row)));
-  const oldIndex = indexRows(oldRows);
+  const oldIndex = indexRows(oldRows.filter(row => !outsideShopify(row)));
   const newIndex = indexRows(newRows);
   const catalogProducts = new Map<string, Row[]>();
   if (catalog) {
@@ -364,12 +365,11 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
   for (const row of oldRows) {
     if (linked.has(row)) continue;
     scope.unmatchedOld++;
-    const outsideShopify = !!(row.externalOrder && row.gateway && !normalize(row.gateway).includes('shopify'));
     findings.push({
       order: row.order || row.externalOrder || row.orderId, email: row.email, product: row.product || row.sku, sku: row.sku, date: row.date,
-      status: 'Review', matchedBy: '', reason: outsideShopify ? `Old-app sale via ${row.gateway}; no Shopify line item matched.` : 'Old entitlement has no matching Shopify line item in this export.',
+      status: 'Review', matchedBy: '', reason: outsideShopify(row) ? `Old-app sale via ${row.gateway}; no Shopify line item matched.` : 'Old entitlement has no matching Shopify line item in this export.',
       candidate: '', oldAssets: row.assetId, orderId: row.orderId, lineId: '', record: sourceRecord(row), buyerKey: buyerKey(row), origin: 'Old download app',
-      action: outsideShopify ? 'Check the new app, then manually resend if access is missing.' : 'Expand the Shopify export or look up the original purchase before restoring.',
+      action: outsideShopify(row) ? 'Check the new app, then manually resend if access is missing.' : 'Expand the Shopify export or look up the original purchase before restoring.',
     });
   }
   const atRiskBuyers = [...buyers.values()].filter(severity => severity === 2).length;
