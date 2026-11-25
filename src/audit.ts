@@ -186,6 +186,34 @@ const validRowWidth = (file: Dataset, row: Row) => file.rows[row.csvRow - 2].len
 const sourceRecord = (row: Row) => String(row.csvRow);
 const outsideShopify = (row: Row) => !!(row.externalOrder && row.gateway && !normalize(row.gateway).includes('shopify'));
 
+const productSignature = (row: Row) => key(normalize(row.sku), productName(row), normalize(row.variant));
+
+function indexProducts(rows: Row[]) {
+  const index = new Map<string, Row[]>();
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const signature = productSignature(row);
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    for (const product of productKeys(row)) {
+      for (const bucketKey of row.sku ? [product] : [product, key('no sku', product)]) {
+        const bucket = index.get(bucketKey);
+        if (bucket) bucket.push(row);
+        else index.set(bucketKey, [row]);
+      }
+    }
+  }
+  return (row: Row) => {
+    const sku = normalize(row.sku);
+    if (sku && index.get(key('sku', sku))?.some(order => productStrength(row, order))) return true;
+    const name = productName(row);
+    return [name, name.split(' - ')[0]].filter(Boolean).some(value => {
+      const product = key('name', value);
+      return index.get(sku ? key('no sku', product) : product)?.some(order => productStrength(row, order));
+    });
+  };
+}
+
 export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report {
   const oldRows = mappedRows(oldApp).filter(row => validPurchase(row) && validRowWidth(oldApp, row));
   const lineItems = shopifyLineItems(mappedRows(orders));
@@ -208,18 +236,17 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     oldRows: oldApp.rows.length, unmatchedOld: 0, oldBuyers: new Set(oldRows.map(buyerKey)).size,
     invalidOld: oldApp.rows.length - oldRows.length, invalidNew: newApp.rows.length - newRows.length,
   };
-  const orderProducts = new Map<string, Row[]>();
-  for (const row of lineItems) {
-    for (const product of productKeys(row)) {
-      const bucket = orderProducts.get(product);
-      if (bucket) bucket.push(row);
-      else orderProducts.set(product, [row]);
-    }
-  }
+  const hasOrderProduct = indexProducts(lineItems);
+  const productMatches = new Map<string, boolean>();
   const unmatched = new Map<string, string>();
   for (const row of oldRows) {
-    const products = productKeys(row);
-    if (products.length && !products.some(product => orderProducts.get(product)?.some(order => productStrength(row, order)))) {
+    const signature = productSignature(row);
+    let matches = productMatches.get(signature);
+    if (matches === undefined) {
+      matches = hasOrderProduct(row);
+      productMatches.set(signature, matches);
+    }
+    if (!matches) {
       unmatched.set(normalize(row.sku || row.product), row.product || row.sku);
     }
   }
