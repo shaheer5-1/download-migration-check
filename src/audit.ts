@@ -72,7 +72,7 @@ function productStrength(a: Row, b: Row) {
 
 type Candidate = { row: Row; strength: number; by: Match };
 
-function indexRows(rows: Row[]) {
+function indexRows(rows: Row[], allowFallback = (_row: Row) => true) {
   const index = new Map<string, Row[]>();
   const identities = (row: Row) => [
     ['order', orderNumber(row.order)], ['orderId', normalize(row.orderId)], ['email', normalize(row.email)],
@@ -108,6 +108,7 @@ function indexRows(rows: Row[]) {
       const idsComparable = !!(orderId && candidateOrderId);
       if (idsComparable && orderId === candidateOrderId && (!numbersComparable || order === candidateOrder)) exact.push({ row, strength, by: 'Shopify order ID' });
       else if (numbersComparable && order === candidateOrder && !idsComparable) exact.push({ row, strength, by: 'Order number' });
+      else if (!allowFallback(row)) continue;
       else if (email && email === candidateEmail && !numbersComparable && !idsComparable) exact.push({ row, strength, by: 'Email' });
       else if (order && candidateOrder && looseOrder(order) && looseOrder(order) === looseOrder(candidateOrder)) {
         alternatives.push({ row, reason: 'Order numbers differ in formatting; verify the original purchase.' });
@@ -220,7 +221,7 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
   const catalog = isCatalog(newApp.mapping);
   const newRows = mappedRows(newApp).filter(row => validRowWidth(newApp, row) &&
     (catalog ? validProduct(row) && !!(row.file || row.assetId) : validPurchase(row)));
-  const oldIndex = indexRows(oldRows.filter(row => !outsideShopify(row)));
+  const oldIndex = indexRows(oldRows, row => !outsideShopify(row));
   const newIndex = indexRows(newRows);
   const catalogProducts = new Map<string, Row[]>();
   if (catalog) {
