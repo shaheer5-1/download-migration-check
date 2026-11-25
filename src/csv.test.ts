@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { audit } from './audit';
-import { decodeCsv, detectSource, missingFields, parseCsv, type Source } from './csv';
+import { checkSlot, decodeCsv, detectSource, missingFields, parseCsv, storeMismatch, type Source } from './csv';
 
 function read(name: string) {
   const bytes = readFileSync(new URL(`./fixtures/${name}.csv`, import.meta.url));
@@ -30,6 +30,14 @@ describe('messy tester fixtures', () => {
 
   it.each(['old', 'next', 'orders'] as const)('recognizes the %s sample if put in a different slot', source => {
     expect(detectSource(parse(source).headers)).toBe(source);
+    expect(() => checkSlot(parse(source), source === 'orders' ? 'old' : 'orders')).toThrow('correct slot');
+  });
+
+  it('rejects a Shopify products export and detects incompatible store identifiers', () => {
+    expect(() => checkSlot(parseCsv('Handle,Title,Variant SKU\nphotos,Photos,P', 'products.csv', 'next'), 'next')).toThrow('product catalog');
+    const storeFile = (store: string) => parseCsv(`Buyer Email,Product,Store Domain\na@example.test,Photos,${store}`, 'file.csv', 'old');
+    expect(storeMismatch([storeFile('https://cedar.example/'), storeFile('CEDAR.example')])).toBe(false);
+    expect(storeMismatch([storeFile('cedar.example'), storeFile('maple.example')])).toBe(true);
   });
 
   it.each(['shopify-empty', 'shopify-headers-only'])('rejects %s', orders => {

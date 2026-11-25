@@ -5,10 +5,12 @@ A browser-only tool for Shopify merchants who want to spot gaps in digital downl
 ## Try it
 
 1. Select **Load sample data**, or choose three CSVs: your old download app export, your new download app export, and a Shopify orders export. Each sample is also downloadable from its file card.
-2. Confirm the columns under **Map columns** if the app doesn't recognize your headers.
-3. Select **Run migration check**, filter the results, and download the at-risk rows as a CSV.
+2. Confirm the columns under **Map columns** if the app doesn't recognize your headers. Use the per-slot guidance to find the right exports, and confirm your files all describe the same store.
+3. Select **Run migration check**, verify flagged records in the source apps, and download the at-risk rows as a restoration checklist. You can also export a one-row-per-buyer list, a review queue, or a scope summary.
 
-The audit checks paid Shopify line items that match an old entitlement. It looks for a new entitlement by order number and product first, then by buyer email and product. Products match by SKU when both files provide one and by name otherwise. Matching ignores case, redundant whitespace, and leading order-number hashes. A buyer is at risk if any checked line is missing access. Unique buyers are counted by email when available, otherwise by order number. Unmatched products are old-app products with no matching product in the supplied Shopify export. Download links in exports are not opened or tested.
+The audit checks paid or partially refunded Shopify line items that match an old download record. It looks for a new record by order number and product first, then by buyer email and product if an order number is missing. Products match by SKU or product/variant names. Matching ignores case, redundant whitespace, and leading order-number hashes; potentially similar IDs or emails are review candidates, not automatic matches. Conflicts, unclear refunds, repeat rows, cancelled paid orders, and unlinked old records are flagged for review. A variant-to-file export checks file configuration, not buyer-level access. No download links are opened or tested.
+
+The buyer counts prioritize **At risk**, then **Needs review**, then **Covered** so each Shopify buyer is counted once. Off-Shopify and other unlinked old records are listed separately. Use the scope breakdown to see skipped or incomplete records. Resolve issues in the source apps, run the check again with fresh exports, and verify downloads before retiring the old app.
 
 ## Development
 

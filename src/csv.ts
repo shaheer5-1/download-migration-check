@@ -4,10 +4,10 @@ export type Source = 'old' | 'next' | 'orders';
 export type Field = 'order' | 'email' | 'product' | 'sku' | 'status' | 'date' | 'assetId'
   | 'variant' | 'access' | 'externalOrder' | 'gateway' | 'cancelled' | 'orderId' | 'lineId' | 'quantity' | 'store' | 'file';
 export type Mapping = Partial<Record<Field, number>>;
-export type Dataset = { headers: string[]; rows: string[][]; mapping: Mapping; name: string };
+export type Dataset = { headers: string[]; rows: string[][]; mapping: Mapping; name: string; storeNames: string[] };
 
 export const fields: Record<Source, Field[]> = {
-  old: ['order', 'email', 'product', 'sku', 'variant', 'assetId', 'externalOrder', 'gateway', 'store'],
+  old: ['order', 'email', 'product', 'sku', 'variant', 'assetId', 'date', 'externalOrder', 'gateway', 'store'],
   next: ['order', 'email', 'product', 'sku', 'variant', 'assetId', 'file', 'access', 'store'],
   orders: ['order', 'email', 'product', 'sku', 'status', 'date', 'cancelled', 'orderId', 'lineId', 'quantity', 'store'],
 };
@@ -80,6 +80,38 @@ export function detectSource(headers: string[]): Source | undefined {
   if (names.has('licensekeys') || (names.has('shopifyordernumber') && names.has('customeremail'))) return 'next';
 }
 
+export function productCatalog(headers: string[]) {
+  const names = new Set(headers.map(normalizeHeader));
+  return names.has('handle') && (names.has('title') || names.has('variantprice')) && !['file', 'filename', 'fileurl', 'downloadfile'].some(name => names.has(name));
+}
+
+export function checkSlot(file: Dataset, source: Source) {
+  if (productCatalog(file.headers)) throw new Error('This looks like a product catalog, not a download or orders export. Replace it with the CSV described above.');
+  const detected = detectSource(file.headers);
+  const titles = { old: 'Old download app', next: 'New download app', orders: 'Shopify orders' };
+  if (detected && detected !== source) throw new Error(`This looks like a file for “${titles[detected]}”. Replace this file or use the correct slot.`);
+}
+
+export function storesIn(file: Dataset) {
+  const column = file.mapping.store;
+  if (column === undefined) return [];
+  const values = new Map<string, string>();
+  for (const row of file.rows) {
+    const store = row[column]?.trim();
+    if (store) values.set(storeKey(store), store);
+    if (values.size === 2) break;
+  }
+  return [...values.values()];
+}
+
+export function storeMismatch(files: Dataset[]) {
+  return new Set(files.flatMap(storesIn).map(storeKey)).size > 1;
+}
+
+export function storeKey(store: string) {
+  return store.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/\s+/g, ' ');
+}
+
 export function parseCsv(data: string, name: string, source: Source): Dataset {
   const directive = /^\uFEFF?sep=([,;\t])\r?\n/i.exec(data);
   const parsed = Papa.parse<string[]>(directive ? data.slice(directive[0].length) : data, {
@@ -92,7 +124,9 @@ export function parseCsv(data: string, name: string, source: Source): Dataset {
   if (headerRow.length === 1) throw new Error('Expected column headers separated by commas, semicolons, or tabs.');
   const headers = headerRow.map(header => header.trim());
   if (!rows.length && source !== 'next') throw new Error('This file has headers but no data rows. Export a file with records.');
-  return { headers, rows, mapping: detectMapping(headers, source), name };
+  const file = { headers, rows, mapping: detectMapping(headers, source), name, storeNames: [] as string[] };
+  file.storeNames = storesIn(file);
+  return file;
 }
 
 export function mappedRows(data: Dataset): (Record<Field, string> & { csvRow: number })[] {
