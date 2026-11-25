@@ -7,13 +7,13 @@ export type Mapping = Partial<Record<Field, number>>;
 export type Dataset = { headers: string[]; rows: string[][]; mapping: Mapping; name: string; storeNames: string[] };
 
 export const fields: Record<Source, Field[]> = {
-  old: ['order', 'email', 'product', 'sku', 'variant', 'assetId', 'date', 'externalOrder', 'gateway', 'store'],
-  next: ['order', 'email', 'product', 'sku', 'variant', 'assetId', 'file', 'access', 'store'],
+  old: ['order', 'orderId', 'email', 'product', 'sku', 'variant', 'assetId', 'date', 'externalOrder', 'gateway', 'store'],
+  next: ['order', 'orderId', 'email', 'product', 'sku', 'variant', 'assetId', 'file', 'access', 'store'],
   orders: ['order', 'email', 'product', 'sku', 'status', 'date', 'cancelled', 'orderId', 'lineId', 'quantity', 'store'],
 };
 
 const aliases: Record<Field, string[]> = {
-  order: ['Shopify Order Number', 'Shopify Order Name', 'Order number', 'Order Name', 'Shopify Order ID', 'Order ID', 'Order #', 'Order'],
+  order: ['Shopify Order Number', 'Shopify Order Name', 'Order number', 'Order Name', 'Order ID', 'Order #', 'Order'],
   email: ['Email', 'Email Address', 'Buyer Email', 'Customer Email', 'Recipient Email', 'Purchaser Email', 'Buyer', 'Customer'],
   product: ['Lineitem name', 'Line item name', 'Product name', 'Product title', 'Product', 'Item name', 'Item', 'Download name'],
   sku: ['Lineitem sku', 'Line item sku', 'Product sku', 'Variant sku', 'SKU'],
@@ -25,7 +25,7 @@ const aliases: Record<Field, string[]> = {
   externalOrder: ['Provider Order ID', 'SendOwl Order ID'],
   gateway: ['Gateway', 'Payment Gateway'],
   cancelled: ['Cancelled at', 'Canceled at', 'Cancellation date'],
-  orderId: ['Id', 'Shopify Order ID'],
+  orderId: ['Shopify Order ID'],
   lineId: ['Lineitem ID', 'Line item ID', 'Order Line ID'],
   quantity: ['Lineitem quantity', 'Line item quantity', 'Quantity'],
   store: ['Shopify Store', 'Shopify Domain', 'Shop Domain', 'Store Domain', 'Shop URL', 'Store URL', 'Shop Name', 'Store Name', 'Store'],
@@ -38,7 +38,8 @@ export function detectMapping(headers: string[], source: Source): Mapping {
   const names = headers.map(normalizeHeader);
   const mapping: Mapping = {};
   for (const field of fields[source]) {
-    const candidates = field === 'order' && source === 'orders' ? ['Name', ...aliases.order] : aliases[field];
+    const candidates = field === 'order' && source === 'orders' ? ['Name', ...aliases.order]
+      : field === 'orderId' && source === 'orders' ? ['Id', ...aliases.orderId] : aliases[field];
     const match = candidates.map(name => names.indexOf(normalizeHeader(name))).find(index => index >= 0);
     if (match !== undefined) mapping[field] = match;
   }
@@ -52,14 +53,16 @@ export function detectMapping(headers: string[], source: Source): Mapping {
 
 export function missingFields(mapping: Mapping, source: Source): string[] {
   const missing = [];
-  if (mapping.order === undefined && mapping.email === undefined && !(source === 'next' && isCatalog(mapping))) missing.push('order number or buyer email');
+  if (mapping.order === undefined && mapping.orderId === undefined && mapping.email === undefined &&
+      !(source === 'next' && isCatalog(mapping))) missing.push('order number or buyer email');
   if (mapping.product === undefined && mapping.sku === undefined) missing.push('product name or SKU');
   if (source === 'orders' && mapping.status === undefined) missing.push('financial status');
   return missing;
 }
 
 export function isCatalog(mapping: Mapping) {
-  return mapping.order === undefined && mapping.email === undefined && (mapping.file !== undefined || mapping.assetId !== undefined);
+  return mapping.order === undefined && mapping.orderId === undefined && mapping.email === undefined &&
+    (mapping.file !== undefined || mapping.assetId !== undefined);
 }
 
 export function decodeCsv(buffer: ArrayBuffer) {

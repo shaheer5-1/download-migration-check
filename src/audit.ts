@@ -1,7 +1,7 @@
 import { isCatalog, mappedRows, type Dataset } from './csv';
 
 type Row = ReturnType<typeof mappedRows>[number];
-type Match = 'Order number' | 'Email';
+type Match = 'Order number' | 'Shopify order ID' | 'Email';
 export type Finding = {
   order: string;
   email: string;
@@ -75,7 +75,7 @@ type Candidate = { row: Row; strength: number; by: Match };
 function indexRows(rows: Row[]) {
   const index = new Map<string, Row[]>();
   const identities = (row: Row) => [
-    ['order', orderNumber(row.order)], ['email', normalize(row.email)],
+    ['order', orderNumber(row.order)], ['orderId', normalize(row.orderId)], ['email', normalize(row.email)],
     ['similar order', looseOrder(row.order)], ['similar email', looseEmail(row.email)],
   ];
   for (const row of rows) {
@@ -96,14 +96,19 @@ function indexRows(rows: Row[]) {
     const exact: Candidate[] = [];
     const alternatives: { row: Row; reason: string }[] = [];
     const order = orderNumber(target.order);
+    const orderId = normalize(target.orderId);
     const email = normalize(target.email);
     for (const row of unique(entries)) {
       const strength = productStrength(target, row);
       if (!strength) continue;
       const candidateOrder = orderNumber(row.order);
+      const candidateOrderId = normalize(row.orderId);
       const candidateEmail = normalize(row.email);
-      if (order && order === candidateOrder) exact.push({ row, strength, by: 'Order number' });
-      else if (email && email === candidateEmail && (!order || !candidateOrder)) exact.push({ row, strength, by: 'Email' });
+      const numbersComparable = !!(order && candidateOrder);
+      const idsComparable = !!(orderId && candidateOrderId);
+      if (idsComparable && orderId === candidateOrderId && (!numbersComparable || order === candidateOrder)) exact.push({ row, strength, by: 'Shopify order ID' });
+      else if (numbersComparable && order === candidateOrder && !idsComparable) exact.push({ row, strength, by: 'Order number' });
+      else if (email && email === candidateEmail && !numbersComparable && !idsComparable) exact.push({ row, strength, by: 'Email' });
       else if (order && candidateOrder && looseOrder(order) && looseOrder(order) === looseOrder(candidateOrder)) {
         alternatives.push({ row, reason: 'Order numbers differ in formatting; verify the original purchase.' });
       } else if (email && email === candidateEmail) {
@@ -112,7 +117,7 @@ function indexRows(rows: Row[]) {
         alternatives.push({ row, reason: 'Buyer emails differ by a plus alias; verify the recipient.' });
       }
     }
-    const byOrder = exact.filter(match => match.by === 'Order number');
+    const byOrder = exact.filter(match => match.by !== 'Email');
     const ranked = byOrder.length ? byOrder : exact;
     const best = ranked.reduce((strength, match) => Math.max(strength, match.strength), 0);
     return { matches: ranked.filter(match => match.strength === best), alternatives };
@@ -122,15 +127,26 @@ function indexRows(rows: Row[]) {
 function shopifyLineItems(rows: Row[]): Row[] {
   const metadata = new Map<string, Pick<Row, 'email' | 'status' | 'date' | 'cancelled' | 'orderId'>>();
   const orderNames: string[] = [];
+  const purchaseKeys: string[] = [];
   let order = '';
+  let purchaseKey = '';
   for (const row of rows) {
-    if (row.order) order = row.order;
-    else if (row.status || row.date || row.email || row.orderId) order = '';
-    const id = orderNumber(order);
+    if (row.order) {
+      order = row.order;
+      purchaseKey = key('name', orderNumber(row.order));
+    } else if (row.orderId) {
+      if (normalize(row.orderId) !== normalize(metadata.get(purchaseKey)?.orderId ?? '')) {
+        order = '';
+        purchaseKey = key('id', normalize(row.orderId));
+      }
+    } else if (row.status || row.date || row.email) {
+      order = purchaseKey = '';
+    }
     orderNames.push(order);
-    if (id) {
-      const previous = metadata.get(id);
-      metadata.set(id, {
+    purchaseKeys.push(purchaseKey);
+    if (purchaseKey) {
+      const previous = metadata.get(purchaseKey);
+      metadata.set(purchaseKey, {
         email: row.email || previous?.email || '',
         status: row.status || previous?.status || '',
         date: row.date || previous?.date || '',
@@ -141,7 +157,7 @@ function shopifyLineItems(rows: Row[]): Row[] {
   }
   return rows.map((row, index) => {
     const order = orderNames[index];
-    const shared = metadata.get(orderNumber(order));
+    const shared = metadata.get(purchaseKeys[index]);
     return {
       ...row, order,
       email: row.email || shared?.email || '',
@@ -156,7 +172,8 @@ function shopifyLineItems(rows: Row[]): Row[] {
 const differentEmail = (a: Row, b: Row) => !!a.email && !!b.email && normalize(a.email) !== normalize(b.email);
 const describeRows = (rows: Row[]) => unique(rows.map(row =>
   [(row.order || row.externalOrder) && `Order ${row.order || row.externalOrder}`, row.email, row.product, row.variant,
-    row.sku && `SKU ${row.sku}`, row.assetId && `ID ${row.assetId}`, row.access].filter(Boolean).join(' · '))).join('; ');
+    row.orderId && `Shopify order ID ${row.orderId}`, row.sku && `SKU ${row.sku}`,
+    row.assetId && `ID ${row.assetId}`, row.access].filter(Boolean).join(' · '))).join('; ');
 const enabled = (value: string) => ['enabled', 'active', 'granted', 'true', 'yes', '1', 'available'].includes(normalize(value));
 const disabled = (value: string) => ['disabled', 'inactive', 'revoked', 'false', 'no', '0', 'unavailable', 'expired'].includes(normalize(value));
 const ineligible = new Set(['refunded', 'voided', 'canceled', 'cancelled', 'pending', 'authorized', 'unpaid', 'partially_paid', 'expired']);
@@ -164,7 +181,7 @@ const financialStatus = (row: Row) => normalize(row.status).replace(/ /g, '_');
 const buyerKey = (row: Row) => row.email ? key('email', normalize(row.email)) : key('order', orderNumber(row.order || row.orderId || row.externalOrder));
 const orderKey = (row: Row) => orderNumber(row.order || row.orderId) || key('row', String(row.csvRow));
 const validProduct = (row: Row) => !!(row.product || row.sku);
-const validPurchase = (row: Row) => validProduct(row) && !!(row.order || row.email);
+const validPurchase = (row: Row) => validProduct(row) && !!(row.order || row.orderId || row.email);
 const validRowWidth = (file: Dataset, row: Row) => file.rows[row.csvRow - 2].length === file.headers.length;
 const sourceRecord = (row: Row) => String(row.csvRow);
 
@@ -268,7 +285,7 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     const target = { ...row, email: row.email || (unique(old.map(asset => normalize(asset.email)).filter(Boolean)).length === 1
       ? old.find(asset => asset.email)?.email ?? '' : '') };
     const next = newIndex(target);
-    const line = key(orderNumber(target.order), normalize(target.email), normalize(row.sku), normalize(row.product));
+    const line = key(orderKey(target), normalize(target.email), normalize(row.sku), normalize(row.product));
     for (const match of next.matches) {
       const byLine = claims.get(match.row) ?? new Map();
       byLine.set(line, match.strength);
@@ -349,9 +366,9 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     scope.unmatchedOld++;
     const outsideShopify = !!(row.externalOrder && row.gateway && !normalize(row.gateway).includes('shopify'));
     findings.push({
-      order: row.order || row.externalOrder, email: row.email, product: row.product || row.sku, sku: row.sku, date: row.date,
+      order: row.order || row.externalOrder || row.orderId, email: row.email, product: row.product || row.sku, sku: row.sku, date: row.date,
       status: 'Review', matchedBy: '', reason: outsideShopify ? `Old-app sale via ${row.gateway}; no Shopify line item matched.` : 'Old entitlement has no matching Shopify line item in this export.',
-      candidate: '', oldAssets: row.assetId, orderId: '', lineId: '', record: sourceRecord(row), buyerKey: buyerKey(row), origin: 'Old download app',
+      candidate: '', oldAssets: row.assetId, orderId: row.orderId, lineId: '', record: sourceRecord(row), buyerKey: buyerKey(row), origin: 'Old download app',
       action: outsideShopify ? 'Check the new app, then manually resend if access is missing.' : 'Expand the Shopify export or look up the original purchase before restoring.',
     });
   }
