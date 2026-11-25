@@ -270,6 +270,8 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
       purchasesByEmail = new Map();
       for (const purchase of lineItems) {
         if (!purchase.email || !(purchase.order || purchase.orderId) || !validRowWidth(orders, purchase)) continue;
+        const status = financialStatus(purchase);
+        if (status !== 'paid' && status !== 'partially_refunded') continue;
         for (const product of productKeys(purchase)) {
           const id = key(normalize(purchase.email), product);
           const bucket = purchasesByEmail.get(id);
