@@ -55,7 +55,11 @@ const productName = (row: Row) => normalize(row.product && row.variant && !norma
 
 function variantConflicts(name: string, variant: string, otherName: string) {
   const suffix = ` - ${variant}`;
-  return !!variant && name.endsWith(suffix) && otherName.startsWith(`${name.split(' - ')[0]} - `) && name !== otherName;
+  if (!variant || !name.endsWith(suffix) || !otherName.startsWith(`${name.split(' - ')[0]} - `)) return false;
+  if (!otherName.endsWith(suffix)) return true;
+  const base = name.slice(0, -suffix.length);
+  const otherBase = otherName.slice(0, -suffix.length);
+  return base !== otherBase && !base.startsWith(`${otherBase} - `) && !otherBase.startsWith(`${base} - `);
 }
 
 function productStrength(a: Row, b: Row) {
@@ -67,8 +71,9 @@ function productStrength(a: Row, b: Row) {
     if (sameName) return 2;
     const variantA = normalize(a.variant);
     const variantB = normalize(b.variant);
-    if ((variantA && variantB && variantA !== variantB) ||
-        variantConflicts(nameA, variantA, nameB) || variantConflicts(nameB, variantB, nameA)) return 0;
+    const conflict = variantA && variantB ? variantA !== variantB
+      : variantConflicts(nameA, variantA, nameB) || variantConflicts(nameB, variantB, nameA);
+    if (conflict) return 0;
     return 1;
   }
   if (sameName) return 2;
