@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 import { audit, type Finding, type Report } from './audit';
-import { fields, missingFields, parseCsv, type Dataset, type Field, type Source } from './csv';
+import { decodeCsv, detectSource, fields, missingFields, parseCsv, type Dataset, type Field, type Source } from './csv';
 import { icon } from './icons';
 import { samples } from './samples';
 import './style.css';
@@ -14,10 +14,11 @@ const details = {
 const labels: Record<Field, string> = {
   order: 'Order number', email: 'Buyer email', product: 'Product name', sku: 'SKU', status: 'Financial status', date: 'Order date',
   assetId: 'Asset ID', variant: 'Variant', access: 'Access status', externalOrder: 'Provider order ID', gateway: 'Gateway',
-  cancelled: 'Cancelled at', orderId: 'Shopify order ID', lineId: 'Shopify line ID', quantity: 'Quantity', store: 'Store',
+  cancelled: 'Cancelled at', orderId: 'Shopify order ID', lineId: 'Shopify line ID', quantity: 'Quantity', store: 'Store', file: 'File',
 };
 const data: Partial<Record<Source, Dataset>> = {};
 const loads: Record<Source, number> = { old: 0, next: 0, orders: 0 };
+let emptyNewConfirmed = false;
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
@@ -81,7 +82,7 @@ let hasReport = false;
 function syncControls() {
   const ready = sources.filter(source => data[source] && !missingFields(data[source].mapping, source).length).length;
   byId('file-count').textContent = `${ready} of 3 files ready`;
-  run.disabled = ready !== 3;
+  run.disabled = ready !== 3 || (data.next?.rows.length === 0 && !emptyNewConfirmed);
   if (hasReport) reportElement.innerHTML = '<p class="empty">Files or mappings changed. Run the migration check again to update the report.</p>';
   hasReport = false;
 }
@@ -113,7 +114,12 @@ function renderSource(source: Source, error = '') {
         ${fields[source].map(field => `<label>${labels[field]}<select data-field="${field}"><option value="">Not mapped</option>${file.headers.map((header, index) =>
           `<option value="${index}" ${file.mapping[field] === index ? 'selected' : ''}>${escapeHTML(header || `Column ${index + 1}`)}</option>`).join('')}</select></label>`).join('')}
       </div>
-    </details>` : '';
+    </details>
+    ${source === 'next' && !file.rows.length ? '<label class="check-confirm"><input type="checkbox" id="confirm-empty"> The new export intentionally has no records</label>' : ''}` : '';
+  panel.querySelector<HTMLInputElement>('#confirm-empty')?.addEventListener('change', event => {
+    emptyNewConfirmed = (event.target as HTMLInputElement).checked;
+    syncControls();
+  });
   for (const select of panel.querySelectorAll<HTMLSelectElement>('select')) {
     select.addEventListener('change', () => {
       if (!file) return;
@@ -129,7 +135,11 @@ function renderSource(source: Source, error = '') {
 
 function setSource(source: Source, text: string, name: string) {
   try {
-    data[source] = parseCsv(text, name, source);
+    const file = parseCsv(text, name, source);
+    const detected = detectSource(file.headers);
+    if (detected && detected !== source) throw new Error(`This looks like a file for “${details[detected].title}”. Check the slot and select the correct export.`);
+    if (source === 'next') emptyNewConfirmed = false;
+    data[source] = file;
     renderSource(source);
   } catch (error) {
     delete data[source];
@@ -150,7 +160,7 @@ for (const source of sources) {
     renderSource(source, 'Reading CSV…');
     syncControls();
     try {
-      const text = await file.text();
+      const text = decodeCsv(await file.arrayBuffer());
       if (load === loads[source]) setSource(source, text, file.name);
     } catch {
       if (load !== loads[source]) return;
@@ -171,6 +181,7 @@ byId('load-sample').addEventListener('click', () => {
 const reportColumns = [
   ['Order', 'order'], ['Buyer email', 'email'], ['Product', 'product'], ['SKU', 'sku'], ['Status', 'status'],
   ['Reason', 'reason'], ['Candidate', 'candidate'], ['Old file IDs', 'oldAssets'], ['Matched by', 'matchedBy'], ['Order date', 'date'],
+  ['Source', 'origin'], ['Shopify order ID', 'orderId'], ['Shopify line ID', 'lineId'], ['CSV record', 'record'], ['Next step', 'action'],
 ] as const satisfies ReadonlyArray<readonly [string, keyof Finding]>;
 
 function renderReport(report: Report) {
@@ -184,8 +195,15 @@ function renderReport(report: Report) {
   reportElement.innerHTML = `
     <div class="metrics">${metrics.map(([label, value, hint, tone]) => `<div class="metric ${tone}"><div>${label}</div><strong>${value}</strong><p>${hint}</p></div>`).join('')}</div>
     ${report.unmatchedProducts.length ? `<details class="unmatched"><summary>View unmatched products ${icon('chevron', 15)}</summary><ul>${report.unmatchedProducts.map(product => `<li>${escapeHTML(product)}</li>`).join('')}</ul></details>` : ''}
+    ${report.scope.unknownStatus || report.scope.unidentified || report.scope.invalidOld || report.scope.invalidNew
+      ? '<p class="scope-warning"><strong>Incomplete check.</strong> Some records have missing or unrecognized data. Review the scope below before relying on this report.</p>' : ''}
+    <details class="unmatched" open><summary>Audit scope ${icon('chevron', 15)}</summary>
+      <p>${report.scope.shopifyOrders} identifiable Shopify orders, ${report.scope.shopifyRows} Shopify records: ${report.scope.checkedRows} checked, ${report.scope.withoutOld} without old access, ${report.scope.excludedStatus} excluded by financial status, ${report.scope.unknownStatus} with blank or unrecognized financial status, ${report.scope.unidentified} incomplete or unidentified, ${report.scope.duplicates} repeated.</p>
+      <p>${report.scope.oldRows} old-app records, ${report.scope.oldBuyers} identifiable old-app buyers, ${report.scope.unmatchedOld} unlinked old entitlements shown for review. Unlinked old entitlements are separate from the Shopify buyer counts.</p>
+      ${report.scope.invalidOld || report.scope.invalidNew ? `<p>Records skipped for missing fields or inconsistent column counts: old app ${report.scope.invalidOld}; new app ${report.scope.invalidNew}.</p>` : ''}
+    </details>
     <div class="table-panel">
-      <div class="table-heading"><div><h3>Download access</h3><p>One row per checked Shopify line item.</p></div><button class="button secondary" id="export" type="button" ${report.atRiskBuyers ? '' : 'disabled'}>${icon('download', 16)} Download at-risk CSV</button></div>
+      <div class="table-heading"><div><h3>Download access</h3><p>Shopify line items and unlinked old entitlements, including records that need review.</p></div><button class="button secondary" id="export" type="button" ${report.atRiskBuyers ? '' : 'disabled'}>${icon('download', 16)} Download at-risk CSV</button></div>
       <div class="filters">
         <label class="search">${icon('search', 17)}<input type="search" id="query" placeholder="Search order, email, product…" aria-label="Search order, email, product or SKU"></label>
         <label class="status-selector"><span>Status</span><select id="status-filter"><option value="">All statuses</option><option>At risk</option><option>Review</option><option>Covered</option></select></label>
@@ -200,7 +218,7 @@ function renderReport(report: Report) {
   const renderRows = () => {
     const term = query.value.trim().toLowerCase();
     const visible = report.findings.filter(finding => (!status.value || status.value === finding.status) &&
-      [finding.order, finding.email, finding.product, finding.sku, finding.candidate, finding.reason].some(value => value.toLowerCase().includes(term)));
+      [finding.order, finding.email, finding.product, finding.sku, finding.candidate, finding.reason, finding.orderId, finding.lineId].some(value => value.toLowerCase().includes(term)));
     byId('findings').innerHTML = visible.map(finding => `<tr>${reportColumns.map(([, field]) =>
       field === 'status' ? `<td><span class="status ${finding.status === 'Covered' ? 'covered' : 'risk'}">${finding.status}</span></td>` :
         `<td>${escapeHTML(finding[field] || '—')}</td>`).join('')}</tr>`).join('') ||

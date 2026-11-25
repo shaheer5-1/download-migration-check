@@ -15,3 +15,10 @@ it('links SendOwl provider IDs via email and Shopify variant titles without cove
   expect(byOrder('#1010')).toMatchObject({ status: 'At risk', product: 'Studio Preset Pack - Capture One' });
   expect(report.unmatchedProducts).not.toContain('Studio Preset Pack');
 });
+
+it('surfaces off-Shopify sales and single-digital-item partial refunds', () => {
+  const report = leaver();
+  expect(report.scope).toMatchObject({ oldBuyers: 10, unmatchedOld: 1, excludedStatus: 1 });
+  expect(report.findings.find(row => row.email === 'finley@example.test')).toMatchObject({ status: 'Review', action: expect.stringContaining('manually resend') });
+  expect(report.findings.find(row => row.order === '#1003')).toMatchObject({ status: 'At risk', reason: expect.stringContaining('Partially refunded') });
+});

@@ -23,7 +23,7 @@ describe('migration audit', () => {
       newApp('10,one@example.test,Guide,A\n10,another@example.test,Wrong Product,C'),
       shopify('#10,one@example.test,paid,Guide,A,2025-11-03\n,,,Kit,B,\n,,,Physical T-shirt,T,\n#11,two@example.test,pending,Guide,A,\n#12,three@example.test,refunded,Guide,A,'),
     );
-    expect(report.findings.map(({ order, product, status }) => [order, product, status])).toEqual([
+    expect(report.findings.filter(row => row.origin === 'Shopify').map(({ order, product, status }) => [order, product, status])).toEqual([
       ['#10', 'Guide', 'Covered'], ['#10', 'Kit', 'At risk'],
     ]);
     expect(report.findings[1]).toMatchObject({ email: 'one@example.test', date: '2025-11-03' });

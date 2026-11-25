@@ -92,6 +92,9 @@ select { min-width: 0; min-height: 31px; background: var(--surface); color: var(
 .metric.amber strong { color: #895006; }
 .unmatched { padding: 12px 1px 0; }
 .unmatched ul { font-size: 13px; color: var(--muted); margin: 6px 0; padding-left: 20px; overflow-wrap: anywhere; }
+.unmatched p, .scope-warning { font-size: 13px; color: var(--muted); margin-top: 7px; line-height: 1.55; }
+.scope-warning { color: #825011; background: #fff0cf; padding: 8px 12px; border-radius: var(--radius); }
+.check-confirm { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; }
 .table-panel { margin-top: 15px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .table-heading, .filters { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px 14px; }
 .table-heading h3 { font-size: 17px; }
