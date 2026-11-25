@@ -4,7 +4,7 @@ export type Source = 'old' | 'next' | 'orders';
 export type Field = 'order' | 'email' | 'product' | 'sku' | 'status' | 'date' | 'assetId'
   | 'variant' | 'access' | 'externalOrder' | 'gateway' | 'cancelled' | 'orderId' | 'lineId' | 'quantity' | 'store' | 'file';
 export type Mapping = Partial<Record<Field, number>>;
-export type Dataset = { headers: string[]; rows: string[][]; mapping: Mapping; name: string; storeNames: string[] };
+export type Dataset = { headers: string[]; rows: string[][]; rowLines: number[]; mapping: Mapping; name: string; storeNames: string[] };
 
 export const fields: Record<Source, Field[]> = {
   old: ['order', 'orderId', 'email', 'product', 'sku', 'variant', 'assetId', 'date', 'externalOrder', 'gateway', 'store'],
@@ -46,7 +46,10 @@ export function detectMapping(headers: string[], source: Source): Mapping {
   if (source !== 'orders' && mapping.order !== undefined && names[mapping.order] === 'orderid' &&
       (mapping.orderId !== undefined || (source === 'old' && names.includes('state') && mapping.gateway !== undefined))) {
     mapping.externalOrder ??= mapping.order;
-    delete mapping.order;
+    const fallback = aliases.order.filter(alias => normalizeHeader(alias) !== 'orderid')
+      .map(alias => names.indexOf(normalizeHeader(alias))).find(index => index >= 0);
+    if (fallback === undefined) delete mapping.order;
+    else mapping.order = fallback;
   }
   return mapping;
 }
@@ -116,26 +119,50 @@ export function storeKey(store: string) {
 }
 
 export function parseCsv(data: string, name: string, source: Source): Dataset {
-  const directive = /^\uFEFF?sep=([,;\t])\r?\n/i.exec(data);
-  const parsed = Papa.parse<string[]>(directive ? data.slice(directive[0].length) : data, {
+  const text = data.replace(/^\uFEFF/, '');
+  const directive = /^sep=([,;\t])(?:\r\n|[\r\n])/i.exec(text);
+  const csv = directive ? text.slice(directive[0].length) : text;
+  const { meta } = Papa.parse<string[]>(csv, {
     delimiter: directive?.[1], delimitersToGuess: [',', ';', '\t'], skipEmptyLines: 'greedy',
+    preview: 1,
   });
-  const error = parsed.errors.find(error => error.code !== 'UndetectableDelimiter');
-  if (error) throw new Error(error.message);
-  const [headerRow, ...rows] = parsed.data;
-  if (!headerRow?.some(header => header.trim())) throw new Error('The CSV needs a header row.');
+  const rows: string[][] = [];
+  const rowLines: number[] = [];
+  const breaks = /\r\n|[\r\n]/g;
+  let nextBreak = breaks.exec(csv);
+  let line = directive ? 2 : 1;
+  const { linebreak } = meta;
+  Papa.parse<string[]>(csv, {
+    delimiter: meta.delimiter,
+    newline: linebreak === '\r\n' || linebreak === '\n' || linebreak === '\r' ? linebreak : undefined,
+    step({ data: row, errors, meta: { cursor } }) {
+      const error = errors.find(error => error.code !== 'UndetectableDelimiter');
+      if (error) throw new Error(error.message);
+      if (row.some(value => value.trim())) {
+        rows.push(row);
+        rowLines.push(line);
+      }
+      while (nextBreak && nextBreak.index < cursor) {
+        line++;
+        nextBreak = breaks.exec(csv);
+      }
+    },
+  });
+  const headerRow = rows.shift();
+  rowLines.shift();
+  if (!headerRow) throw new Error('The CSV needs a header row.');
   if (headerRow.length === 1) throw new Error('Expected column headers separated by commas, semicolons, or tabs.');
   const headers = headerRow.map(header => header.trim());
   if (!rows.length && source !== 'next') throw new Error('This file has headers but no data rows. Export a file with records.');
-  const file = { headers, rows, mapping: detectMapping(headers, source), name, storeNames: [] as string[] };
+  const file = { headers, rows, rowLines, mapping: detectMapping(headers, source), name, storeNames: [] as string[] };
   file.storeNames = storesIn(file);
   return file;
 }
 
-export function mappedRows(data: Dataset): (Record<Field, string> & { csvRow: number })[] {
+export function mappedRows(data: Dataset): (Record<Field, string> & { csvRow: number; rowIndex: number })[] {
   return data.rows.map((row, index) => {
     const val = (field: Field) => row[data.mapping[field] ?? -1]?.trim() ?? '';
     const values = Object.fromEntries((Object.keys(aliases) as Field[]).map(field => [field, val(field)])) as Record<Field, string>;
-    return { ...values, csvRow: index + 2 };
+    return { ...values, csvRow: data.rowLines[index], rowIndex: index };
   });
 }

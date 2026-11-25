@@ -55,7 +55,11 @@ const productName = (row: Row) => normalize(row.product && row.variant && !norma
 
 function variantConflicts(name: string, variant: string, otherName: string) {
   const suffix = ` - ${variant}`;
-  return !!variant && name.endsWith(suffix) && otherName.startsWith(`${name.slice(0, -suffix.length)} - `) && name !== otherName;
+  if (!variant || !name.endsWith(suffix) || !otherName.startsWith(`${name.split(' - ')[0]} - `)) return false;
+  if (!otherName.endsWith(suffix)) return true;
+  const base = name.slice(0, -suffix.length);
+  const otherBase = otherName.slice(0, -suffix.length);
+  return base !== otherBase && !base.startsWith(`${otherBase} - `) && !otherBase.startsWith(`${base} - `);
 }
 
 function productStrength(a: Row, b: Row) {
@@ -67,8 +71,9 @@ function productStrength(a: Row, b: Row) {
     if (sameName) return 2;
     const variantA = normalize(a.variant);
     const variantB = normalize(b.variant);
-    if ((variantA && variantB && variantA !== variantB) ||
-        variantConflicts(nameA, variantA, nameB) || variantConflicts(nameB, variantB, nameA)) return 0;
+    const conflict = variantA && variantB ? variantA !== variantB
+      : variantConflicts(nameA, variantA, nameB) || variantConflicts(nameB, variantB, nameA);
+    if (conflict) return 0;
     return 1;
   }
   if (sameName) return 2;
@@ -77,7 +82,8 @@ function productStrength(a: Row, b: Row) {
 
 type Candidate = { row: Row; strength: number; by: Match };
 
-function indexRows(rows: Row[], allowFallback: (row: Row, target: Row) => boolean = () => true) {
+function indexRows(rows: Row[], allowFallback: (row: Row, target: Row) => boolean = () => true,
+  allowOrderNumber: (row: Row, target: Row) => boolean = () => true) {
   const index = new Map<string, Row[]>();
   const identities = (row: Row) => [
     ['order', orderNumber(row.order)], ['orderId', normalize(row.orderId)], ['email', normalize(row.email)],
@@ -112,7 +118,7 @@ function indexRows(rows: Row[], allowFallback: (row: Row, target: Row) => boolea
       const numbersComparable = !!(order && candidateOrder);
       const idsComparable = !!(orderId && candidateOrderId);
       if (idsComparable && orderId === candidateOrderId && (!numbersComparable || order === candidateOrder)) exact.push({ row, strength, by: 'Shopify order ID' });
-      else if (numbersComparable && order === candidateOrder && !idsComparable) exact.push({ row, strength, by: 'Order number' });
+      else if (numbersComparable && order === candidateOrder && !idsComparable && allowOrderNumber(row, target)) exact.push({ row, strength, by: 'Order number' });
       else if (!allowFallback(row, target)) continue;
       else if (email && email === candidateEmail && !numbersComparable && !idsComparable) exact.push({ row, strength, by: 'Email' });
       else if (order && candidateOrder && looseOrder(order) && looseOrder(order) === looseOrder(candidateOrder)) {
@@ -189,9 +195,16 @@ const buyerKey = (row: Row) => row.email ? key('email', normalize(row.email)) : 
 const orderKey = (row: Row) => orderNumber(row.order || row.orderId) || key('row', String(row.csvRow));
 const validProduct = (row: Row) => !!(row.product || row.sku);
 const validPurchase = (row: Row) => validProduct(row) && !!(row.order || row.orderId || row.email);
-const validRowWidth = (file: Dataset, row: Row) => file.rows[row.csvRow - 2].length === file.headers.length;
+const validRowWidth = (file: Dataset, row: Row) => file.rows[row.rowIndex].length === file.headers.length;
 const sourceRecord = (row: Row) => String(row.csvRow);
-const outsideShopify = (row: Row) => !!(row.externalOrder && row.gateway && !normalize(row.gateway).includes('shopify'));
+const outsideShopify = (row: Row) => !!row.gateway && !normalize(row.gateway).includes('shopify');
+
+function couldMatchSkippedRow(target: Row, skipped: Row) {
+  if (target.order && skipped.order && orderNumber(target.order) !== orderNumber(skipped.order)) return false;
+  if (target.orderId && skipped.orderId && normalize(target.orderId) !== normalize(skipped.orderId)) return false;
+  if (differentEmail(target, skipped)) return false;
+  return !validProduct(skipped) || !!productStrength(target, skipped);
+}
 
 const productSignature = (row: Row) => key(normalize(row.sku), productName(row), normalize(row.variant));
 
@@ -225,8 +238,12 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
   const oldRows = mappedRows(oldApp).filter(row => validPurchase(row) && validRowWidth(oldApp, row));
   const lineItems = shopifyLineItems(mappedRows(orders));
   const catalog = isCatalog(newApp.mapping);
-  const newRows = mappedRows(newApp).filter(row => validRowWidth(newApp, row) &&
-    (catalog ? validProduct(row) && !!(row.file || row.assetId) : validPurchase(row)));
+  const newRows: Row[] = [];
+  const skippedNewRows: Row[] = [];
+  for (const row of mappedRows(newApp)) {
+    const valid = validRowWidth(newApp, row) && (catalog ? validProduct(row) && !!(row.file || row.assetId) : validPurchase(row));
+    (valid ? newRows : skippedNewRows).push(row);
+  }
   const newIndex = indexRows(newRows);
   const catalogProducts = new Map<string, Row[]>();
   if (catalog) {
@@ -240,7 +257,7 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     shopifyRows: lineItems.length, shopifyOrders: new Set(lineItems.filter(row => row.order || row.orderId).map(orderKey)).size,
     checkedRows: 0, withoutOld: 0, excludedStatus: 0, unknownStatus: 0, unidentified: 0, duplicates: 0,
     oldRows: oldApp.rows.length, unmatchedOld: 0, oldBuyers: new Set(oldRows.map(buyerKey)).size,
-    invalidOld: oldApp.rows.length - oldRows.length, invalidNew: newApp.rows.length - newRows.length,
+    invalidOld: oldApp.rows.length - oldRows.length, invalidNew: skippedNewRows.length,
   };
   const hasOrderProduct = indexProducts(lineItems);
   const productMatches = new Map<string, boolean>();
@@ -264,6 +281,8 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
       purchasesByEmail = new Map();
       for (const purchase of lineItems) {
         if (!purchase.email || !(purchase.order || purchase.orderId) || !validRowWidth(orders, purchase)) continue;
+        const status = financialStatus(purchase);
+        if (status !== 'paid' && status !== 'partially_refunded') continue;
         for (const product of productKeys(purchase)) {
           const id = key(normalize(purchase.email), product);
           const bucket = purchasesByEmail.get(id);
@@ -277,8 +296,12 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     return productKeys(entitlement).some(product => purchasesByEmail?.get(key(email, product))?.some(other =>
       orderKey(other) !== purchase && productStrength(other, entitlement) > 0));
   };
+  const oldOrderHeader = normalize(oldApp.headers[oldApp.mapping.order ?? -1] ?? '').replace(/[^a-z]/g, '');
+  const shopifyOrderNumber = oldOrderHeader === 'shopifyordernumber' || oldOrderHeader === 'shopifyordername';
   const oldIndex = indexRows(oldRows, (old, target) => !outsideShopify(old) &&
-    !(old.orderId && !old.order && hasOtherPurchase(target, old)));
+    !(old.orderId && !old.order && hasOtherPurchase(target, old)),
+  (old, target) => !outsideShopify(old) || shopifyOrderNumber ||
+    (!!old.email && normalize(old.email) === normalize(target.email)));
   const linked = new Set<Row>();
   const partialDigitalCount = new Map<string, number>();
   const duplicateKey = (row: Row) => key(orderKey(row), normalize(row.email), productName(row), normalize(row.sku),
@@ -385,6 +408,10 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     } else {
       status = 'At risk';
       reason = 'No new entitlement found for this purchase.';
+    }
+    if (status === 'At risk' && skippedNewRows.some(skipped => couldMatchSkippedRow(target, skipped))) {
+      status = 'Review';
+      reason = 'A skipped row in the new export may match this purchase; check a complete export before restoring.';
     }
     if (financial === 'partially_refunded' && !reason.startsWith('Partially refunded')) reason = `Partially refunded order: verify the retained download in Shopify. ${reason}`;
     const buyer = buyerKey(target);
