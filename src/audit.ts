@@ -141,7 +141,8 @@ function shopifyLineItems(rows: Row[]): Row[] {
         order = '';
         purchaseKey = key('id', normalize(row.orderId));
       }
-    } else if (row.status || row.date || row.email) {
+    } else if (row.status || row.date || (row.email &&
+        (order || normalize(row.email) !== normalize(metadata.get(purchaseKey)?.email ?? '')))) {
       order = purchaseKey = '';
     }
     orderNames.push(order);
