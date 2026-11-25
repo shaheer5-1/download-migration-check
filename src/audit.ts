@@ -55,7 +55,7 @@ const productName = (row: Row) => normalize(row.product && row.variant && !norma
 
 function variantConflicts(name: string, variant: string, otherName: string) {
   const suffix = ` - ${variant}`;
-  return !!variant && name.endsWith(suffix) && otherName.startsWith(`${name.slice(0, -suffix.length)} - `) && name !== otherName;
+  return !!variant && name.endsWith(suffix) && otherName.startsWith(`${name.split(' - ')[0]} - `) && name !== otherName;
 }
 
 function productStrength(a: Row, b: Row) {
