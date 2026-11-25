@@ -46,7 +46,10 @@ export function detectMapping(headers: string[], source: Source): Mapping {
   if (source !== 'orders' && mapping.order !== undefined && names[mapping.order] === 'orderid' &&
       (mapping.orderId !== undefined || (source === 'old' && names.includes('state') && mapping.gateway !== undefined))) {
     mapping.externalOrder ??= mapping.order;
-    delete mapping.order;
+    const fallback = aliases.order.filter(alias => normalizeHeader(alias) !== 'orderid')
+      .map(alias => names.indexOf(normalizeHeader(alias))).find(index => index >= 0);
+    if (fallback === undefined) delete mapping.order;
+    else mapping.order = fallback;
   }
   return mapping;
 }
