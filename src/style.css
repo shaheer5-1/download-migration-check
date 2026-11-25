@@ -127,6 +127,10 @@ th, td { padding: 10px 12px; border-top: 1px solid var(--line); }
 th { background: #f7f9fd; color: #4d5969; font-size: 12px; }
 td { overflow-wrap: anywhere; min-width: 70px; }
 td[data-field=email], td[data-field=status], td[data-field=order] { white-space: nowrap; }
+td[data-field=product] { min-width: 145px; }
+td[data-field=sku] { min-width: 92px; }
+td[data-field=date] { min-width: 168px; }
+td[data-field=origin] { min-width: 112px; }
 td[data-field=reason], td[data-field=candidate], td[data-field=action] { min-width: 180px; }
 .status { display: inline-block; padding: 3px 7px; border-radius: 999px; white-space: nowrap; font-size: 12px; font-weight: 700; }
 .risk { color: #825011; background: #fff0cf; }
