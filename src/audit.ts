@@ -77,7 +77,8 @@ function productStrength(a: Row, b: Row) {
 
 type Candidate = { row: Row; strength: number; by: Match };
 
-function indexRows(rows: Row[], allowFallback: (row: Row, target: Row) => boolean = () => true) {
+function indexRows(rows: Row[], allowFallback: (row: Row, target: Row) => boolean = () => true,
+  allowOrderNumber: (row: Row, target: Row) => boolean = () => true) {
   const index = new Map<string, Row[]>();
   const identities = (row: Row) => [
     ['order', orderNumber(row.order)], ['orderId', normalize(row.orderId)], ['email', normalize(row.email)],
@@ -112,7 +113,7 @@ function indexRows(rows: Row[], allowFallback: (row: Row, target: Row) => boolea
       const numbersComparable = !!(order && candidateOrder);
       const idsComparable = !!(orderId && candidateOrderId);
       if (idsComparable && orderId === candidateOrderId && (!numbersComparable || order === candidateOrder)) exact.push({ row, strength, by: 'Shopify order ID' });
-      else if (numbersComparable && order === candidateOrder && !idsComparable) exact.push({ row, strength, by: 'Order number' });
+      else if (numbersComparable && order === candidateOrder && !idsComparable && allowOrderNumber(row, target)) exact.push({ row, strength, by: 'Order number' });
       else if (!allowFallback(row, target)) continue;
       else if (email && email === candidateEmail && !numbersComparable && !idsComparable) exact.push({ row, strength, by: 'Email' });
       else if (order && candidateOrder && looseOrder(order) && looseOrder(order) === looseOrder(candidateOrder)) {
@@ -191,7 +192,7 @@ const validProduct = (row: Row) => !!(row.product || row.sku);
 const validPurchase = (row: Row) => validProduct(row) && !!(row.order || row.orderId || row.email);
 const validRowWidth = (file: Dataset, row: Row) => file.rows[row.csvRow - 2].length === file.headers.length;
 const sourceRecord = (row: Row) => String(row.csvRow);
-const outsideShopify = (row: Row) => !!(row.externalOrder && row.gateway && !normalize(row.gateway).includes('shopify'));
+const outsideShopify = (row: Row) => !!row.gateway && !normalize(row.gateway).includes('shopify');
 
 const productSignature = (row: Row) => key(normalize(row.sku), productName(row), normalize(row.variant));
 
@@ -277,8 +278,12 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     return productKeys(entitlement).some(product => purchasesByEmail?.get(key(email, product))?.some(other =>
       orderKey(other) !== purchase && productStrength(other, entitlement) > 0));
   };
+  const oldOrderHeader = normalize(oldApp.headers[oldApp.mapping.order ?? -1] ?? '').replace(/[^a-z]/g, '');
+  const shopifyOrderNumber = oldOrderHeader === 'shopifyordernumber' || oldOrderHeader === 'shopifyordername';
   const oldIndex = indexRows(oldRows, (old, target) => !outsideShopify(old) &&
-    !(old.orderId && !old.order && hasOtherPurchase(target, old)));
+    !(old.orderId && !old.order && hasOtherPurchase(target, old)),
+  (old, target) => !outsideShopify(old) || shopifyOrderNumber ||
+    (!!old.email && normalize(old.email) === normalize(target.email)));
   const linked = new Set<Row>();
   const partialDigitalCount = new Map<string, number>();
   const duplicateKey = (row: Row) => key(orderKey(row), normalize(row.email), productName(row), normalize(row.sku),

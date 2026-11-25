@@ -11,3 +11,13 @@ it('keeps a separate SendOwl storefront sale in review when the same buyer also 
     expect.objectContaining({ order: '80002', status: 'Review', origin: 'Old download app', reason: expect.stringContaining('Stripe') }),
   ]);
 });
+
+it('keeps a provider sale in review when only its generic order number collides with Shopify', () => {
+  const old = parseCsv('Provider Order ID,Gateway,Order Number,Buyer Email,Product,SKU\n80001,Stripe,42,,Pattern,PAT', 'old.csv', 'old');
+  const next = parseCsv('Order Number,Product,SKU\n42,Pattern,PAT', 'new.csv', 'next');
+  const orders = parseCsv('Name,Email,Lineitem name,Lineitem sku,Financial Status\n#42,buyer@example.test,Pattern,PAT,paid', 'orders.csv', 'orders');
+  expect(audit(old, next, orders)).toMatchObject({
+    scope: { withoutOld: 1, unmatchedOld: 1 },
+    findings: [expect.objectContaining({ origin: 'Old download app', status: 'Review', reason: expect.stringContaining('Stripe') })],
+  });
+});
