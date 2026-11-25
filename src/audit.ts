@@ -63,7 +63,8 @@ function productStrength(a: Row, b: Row) {
     const variantA = nameA.lastIndexOf(' - ');
     const variantB = nameB.lastIndexOf(' - ');
     if ((a.variant && b.variant && normalize(a.variant) !== normalize(b.variant)) ||
-        (variantA >= 0 && variantB >= 0 && nameA.slice(0, variantA) === nameB.slice(0, variantB))) return 0;
+        ((a.variant || b.variant) && variantA >= 0 && variantB >= 0 &&
+          nameA.slice(0, variantA) === nameB.slice(0, variantB))) return 0;
     return 1;
   }
   if (sameName) return 2;
