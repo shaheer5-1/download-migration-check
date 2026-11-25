@@ -57,7 +57,15 @@ function productStrength(a: Row, b: Row) {
   const nameA = productName(a);
   const nameB = productName(b);
   const sameName = !!nameA && nameA === nameB;
-  if (a.sku && b.sku) return normalize(a.sku) === normalize(b.sku) ? (sameName ? 2 : 1) : 0;
+  if (a.sku && b.sku) {
+    if (normalize(a.sku) !== normalize(b.sku)) return 0;
+    if (sameName) return 2;
+    const variantA = nameA.lastIndexOf(' - ');
+    const variantB = nameB.lastIndexOf(' - ');
+    if ((a.variant && b.variant && normalize(a.variant) !== normalize(b.variant)) ||
+        (variantA >= 0 && variantB >= 0 && nameA.slice(0, variantA) === nameB.slice(0, variantB))) return 0;
+    return 1;
+  }
   if (sameName) return 2;
   return nameA && nameB && (nameA.startsWith(`${nameB} - `) || nameB.startsWith(`${nameA} - `)) ? 1 : 0;
 }
