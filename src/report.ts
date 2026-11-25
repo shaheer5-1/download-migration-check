@@ -21,8 +21,10 @@ export const filenameFor = (context: RunContext, kind: ExportKind) => {
 const unparse = (fields: string[], data: (string | number)[][]) => Papa.unparse({ fields, data }, { escapeFormulae: true });
 
 export function exportReport(report: Report, context: RunContext, kind: ExportKind) {
-  const skipped = report.scope.invalidNew;
-  const warning = skipped ? `New export has ${skipped} skipped ${skipped === 1 ? 'row' : 'rows'}; verify the source before restoring downloads.` : '';
+  const skippedExports = [['Old', report.scope.invalidOld], ['New', report.scope.invalidNew]] as const;
+  const skipped = skippedExports.filter(([, count]) => count > 0)
+    .map(([source, count]) => `${source} export has ${count} skipped ${count === 1 ? 'row' : 'rows'}`);
+  const warning = skipped.length ? `${skipped.join('; ')}; verify the source before restoring downloads.` : '';
   if (kind === 'summary') {
     const scope = report.scope;
     return unparse(['Metric', 'Value'], [
