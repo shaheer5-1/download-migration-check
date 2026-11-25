@@ -199,6 +199,13 @@ const validRowWidth = (file: Dataset, row: Row) => file.rows[row.csvRow - 2].len
 const sourceRecord = (row: Row) => String(row.csvRow);
 const outsideShopify = (row: Row) => !!row.gateway && !normalize(row.gateway).includes('shopify');
 
+function couldMatchSkippedRow(target: Row, skipped: Row) {
+  if (target.order && skipped.order && orderNumber(target.order) !== orderNumber(skipped.order)) return false;
+  if (target.orderId && skipped.orderId && normalize(target.orderId) !== normalize(skipped.orderId)) return false;
+  if (differentEmail(target, skipped)) return false;
+  return !validProduct(skipped) || !!productStrength(target, skipped);
+}
+
 const productSignature = (row: Row) => key(normalize(row.sku), productName(row), normalize(row.variant));
 
 function indexProducts(rows: Row[]) {
@@ -231,8 +238,12 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
   const oldRows = mappedRows(oldApp).filter(row => validPurchase(row) && validRowWidth(oldApp, row));
   const lineItems = shopifyLineItems(mappedRows(orders));
   const catalog = isCatalog(newApp.mapping);
-  const newRows = mappedRows(newApp).filter(row => validRowWidth(newApp, row) &&
-    (catalog ? validProduct(row) && !!(row.file || row.assetId) : validPurchase(row)));
+  const newRows: Row[] = [];
+  const skippedNewRows: Row[] = [];
+  for (const row of mappedRows(newApp)) {
+    const valid = validRowWidth(newApp, row) && (catalog ? validProduct(row) && !!(row.file || row.assetId) : validPurchase(row));
+    (valid ? newRows : skippedNewRows).push(row);
+  }
   const newIndex = indexRows(newRows);
   const catalogProducts = new Map<string, Row[]>();
   if (catalog) {
@@ -246,7 +257,7 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     shopifyRows: lineItems.length, shopifyOrders: new Set(lineItems.filter(row => row.order || row.orderId).map(orderKey)).size,
     checkedRows: 0, withoutOld: 0, excludedStatus: 0, unknownStatus: 0, unidentified: 0, duplicates: 0,
     oldRows: oldApp.rows.length, unmatchedOld: 0, oldBuyers: new Set(oldRows.map(buyerKey)).size,
-    invalidOld: oldApp.rows.length - oldRows.length, invalidNew: newApp.rows.length - newRows.length,
+    invalidOld: oldApp.rows.length - oldRows.length, invalidNew: skippedNewRows.length,
   };
   const hasOrderProduct = indexProducts(lineItems);
   const productMatches = new Map<string, boolean>();
@@ -397,6 +408,10 @@ export function audit(oldApp: Dataset, newApp: Dataset, orders: Dataset): Report
     } else {
       status = 'At risk';
       reason = 'No new entitlement found for this purchase.';
+    }
+    if (status === 'At risk' && skippedNewRows.some(skipped => couldMatchSkippedRow(target, skipped))) {
+      status = 'Review';
+      reason = 'A skipped row in the new export may match this purchase; check a complete export before restoring.';
     }
     if (financial === 'partially_refunded' && !reason.startsWith('Partially refunded')) reason = `Partially refunded order: verify the retained download in Shopify. ${reason}`;
     const buyer = buyerKey(target);

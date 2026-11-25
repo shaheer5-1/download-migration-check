@@ -21,6 +21,8 @@ export const filenameFor = (context: RunContext, kind: ExportKind) => {
 const unparse = (fields: string[], data: (string | number)[][]) => Papa.unparse({ fields, data }, { escapeFormulae: true });
 
 export function exportReport(report: Report, context: RunContext, kind: ExportKind) {
+  const skipped = report.scope.invalidNew;
+  const warning = skipped ? `New export has ${skipped} skipped ${skipped === 1 ? 'row' : 'rows'}; verify the source before restoring downloads.` : '';
   if (kind === 'summary') {
     const scope = report.scope;
     return unparse(['Metric', 'Value'], [
@@ -33,11 +35,14 @@ export function exportReport(report: Report, context: RunContext, kind: ExportKi
       ['Unlinked old records', scope.unmatchedOld], ['Unmatched products', report.unmatchedProducts.length],
       ['Invalid old app records', scope.invalidOld], ['Invalid new app records', scope.invalidNew], ['Buyers checked', report.buyersChecked],
       ['Covered', report.coveredBuyers], ['At risk', report.atRiskBuyers], ['Need review', report.reviewBuyers],
+      ...(warning ? [['Input warning', warning]] : []),
       ['Limit', 'CSV comparisons cannot verify live download access. Check the source apps before contacting buyers.'],
     ]);
   }
   const status = kind === 'review' ? 'Review' : 'At risk';
   const records = report.findings.filter(row => row.status === status);
+  const warningColumn = warning ? [records.length ? 'Input warning' : `Input warning: ${warning}`] : [];
+  const warningCell = warning ? [warning] : [];
   if (kind === 'buyers') {
     const grouped = new Map<string, Finding[]>();
     for (const row of records) {
@@ -45,15 +50,16 @@ export function exportReport(report: Report, context: RunContext, kind: ExportKi
       if (group) group.push(row);
       else grouped.set(row.buyerKey, [row]);
     }
-    return unparse(['Store', 'Run (UTC)', 'Buyer email', 'Orders', 'Shopify order IDs', 'Missing products', 'Reasons', 'Next step'],
+    return unparse(['Store', 'Run (UTC)', 'Buyer email', 'Orders', 'Shopify order IDs', 'Missing products', 'Reasons', 'Next step', ...warningColumn],
       [...grouped.values()].map(rows => {
         const join = (field: keyof Finding) => [...new Set(rows.map(row => row[field]).filter(Boolean))].join('; ');
         return [context.store, context.date, join('email'), join('order'), join('orderId'), join('product'), join('reason'),
-          join('email') ? 'Verify and restore the downloads in the new app before contacting the buyer.' : 'Look up the buyer by order ID or order number in Shopify.'];
+          join('email') ? 'Verify and restore the downloads in the new app before contacting the buyer.' : 'Look up the buyer by order ID or order number in Shopify.',
+          ...warningCell];
       }));
   }
-  return unparse(['Store', 'Run (UTC)', ...reportColumns.map(([label]) => label)],
-    records.map(row => [context.store, context.date, ...reportColumns.map(([, field]) => field === 'status' && status === 'Review' ? 'Needs review' : row[field])]));
+  return unparse(['Store', 'Run (UTC)', ...reportColumns.map(([label]) => label), ...warningColumn],
+    records.map(row => [context.store, context.date, ...reportColumns.map(([, field]) => field === 'status' && status === 'Review' ? 'Needs review' : row[field]), ...warningCell]));
 }
 
 export function filterRows(rows: Finding[], query: string, status: string) {

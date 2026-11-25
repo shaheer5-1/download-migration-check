@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { audit } from './audit';
 import { checkSlot, decodeCsv, detectSource, missingFields, parseCsv, storeMismatch, type Source } from './csv';
+import { exportReport } from './report';
 
 function read(name: string) {
   const bytes = readFileSync(new URL(`./fixtures/${name}.csv`, import.meta.url));
@@ -59,6 +60,26 @@ describe('messy tester fixtures', () => {
     expect(run({ next: 'new-one-truncated-entitlement-row' }).scope.invalidNew).toBe(1);
     expect(run({ orders: 'shopify-unknown-financial-status' }).scope.unknownStatus).toBe(1);
     expect(run({ orders: 'shopify-paid-row-with-neither-email-nor-order' }).scope.unidentified).toBe(1);
+  });
+
+  it('reviews a possible match from a truncated new row without claiming access or exporting it for restoration', () => {
+    const report = run({ next: 'new-one-truncated-entitlement-row' });
+    expect(report).toMatchObject({ buyersChecked: 4, coveredBuyers: 1, reviewBuyers: 1, atRiskBuyers: 2, scope: { invalidNew: 1 } });
+    const affected = report.findings.filter(row => row.order === '#1043');
+    expect(affected).toEqual([expect.objectContaining({ status: 'Review', reason: expect.stringContaining('skipped') })]);
+    expect(affected.some(row => row.status === 'Covered')).toBe(false);
+    const context = { store: 'Test', date: '2026-11-25', files: ['old.csv', 'new.csv', 'orders.csv'] };
+    const risk = exportReport(report, context, 'risk');
+    expect(risk).not.toContain('#1043');
+    expect(risk).toContain('skipped');
+    expect(exportReport(report, context, 'review')).toMatch(/#1043[^\r\n]*Needs review[^\r\n]*skipped/);
+    expect(exportReport(report, context, 'summary')).toContain('skipped');
+  });
+
+  it('keeps a truncated old row in the skipped count without inventing an entitlement', () => {
+    const report = run({ old: 'old-one-truncated-entitlement-row' });
+    expect(report).toMatchObject({ buyersChecked: 3, atRiskBuyers: 1, scope: { invalidOld: 1 } });
+    expect(report.findings.some(row => row.order === '#1045')).toBe(false);
   });
 
   it.each(['shopify-refunded', 'shopify-voided', 'shopify-canceled'])('excludes %s from restoration', orders => {
