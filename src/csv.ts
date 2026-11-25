@@ -43,9 +43,9 @@ export function detectMapping(headers: string[], source: Source): Mapping {
     const match = candidates.map(name => names.indexOf(normalizeHeader(name))).find(index => index >= 0);
     if (match !== undefined) mapping[field] = match;
   }
-  if (source === 'old' && names.includes('state') && mapping.gateway !== undefined &&
-      mapping.order !== undefined && names[mapping.order] === 'orderid') {
-    mapping.externalOrder = mapping.order;
+  if (source !== 'orders' && mapping.order !== undefined && names[mapping.order] === 'orderid' &&
+      (mapping.orderId !== undefined || (source === 'old' && names.includes('state') && mapping.gateway !== undefined))) {
+    mapping.externalOrder ??= mapping.order;
     delete mapping.order;
   }
   return mapping;
