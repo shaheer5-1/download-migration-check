@@ -13,6 +13,8 @@ const details = {
 } as const;
 const labels: Record<Field, string> = {
   order: 'Order number', email: 'Buyer email', product: 'Product name', sku: 'SKU', status: 'Financial status', date: 'Order date',
+  assetId: 'Asset ID', variant: 'Variant', access: 'Access status', externalOrder: 'Provider order ID', gateway: 'Gateway',
+  cancelled: 'Cancelled at', orderId: 'Shopify order ID', lineId: 'Shopify line ID', quantity: 'Quantity', store: 'Store',
 };
 const data: Partial<Record<Source, Dataset>> = {};
 const loads: Record<Source, number> = { old: 0, next: 0, orders: 0 };
@@ -168,7 +170,7 @@ byId('load-sample').addEventListener('click', () => {
 
 const reportColumns = [
   ['Order', 'order'], ['Buyer email', 'email'], ['Product', 'product'], ['SKU', 'sku'], ['Status', 'status'],
-  ['Matched by', 'matchedBy'], ['Order date', 'date'],
+  ['Reason', 'reason'], ['Candidate', 'candidate'], ['Old file IDs', 'oldAssets'], ['Matched by', 'matchedBy'], ['Order date', 'date'],
 ] as const satisfies ReadonlyArray<readonly [string, keyof Finding]>;
 
 function renderReport(report: Report) {
@@ -176,6 +178,7 @@ function renderReport(report: Report) {
     ['Buyers checked', report.buyersChecked, 'Paid orders with old access', 'neutral'],
     ['Covered', report.coveredBuyers, 'All checked downloads matched', 'green'],
     ['At risk', report.atRiskBuyers, 'At least one download missing', 'amber'],
+    ['Needs review', report.reviewBuyers, 'Coverage not verified', 'amber'],
     ['Unmatched products', report.unmatchedProducts.length, 'Old-app products not matched to Shopify', 'neutral'],
   ] as const;
   reportElement.innerHTML = `
@@ -185,7 +188,7 @@ function renderReport(report: Report) {
       <div class="table-heading"><div><h3>Download access</h3><p>One row per checked Shopify line item.</p></div><button class="button secondary" id="export" type="button" ${report.atRiskBuyers ? '' : 'disabled'}>${icon('download', 16)} Download at-risk CSV</button></div>
       <div class="filters">
         <label class="search">${icon('search', 17)}<input type="search" id="query" placeholder="Search order, email, product…" aria-label="Search order, email, product or SKU"></label>
-        <label class="status-selector"><span>Status</span><select id="status-filter"><option value="">All statuses</option><option>At risk</option><option>Covered</option></select></label>
+        <label class="status-selector"><span>Status</span><select id="status-filter"><option value="">All statuses</option><option>At risk</option><option>Review</option><option>Covered</option></select></label>
       </div>
       <div class="table-scroll" role="region" aria-label="Download access results" tabindex="0">
         <table><thead><tr>${reportColumns.map(([label]) => `<th scope="col">${label}</th>`).join('')}</tr></thead><tbody id="findings"></tbody></table>
@@ -197,9 +200,9 @@ function renderReport(report: Report) {
   const renderRows = () => {
     const term = query.value.trim().toLowerCase();
     const visible = report.findings.filter(finding => (!status.value || status.value === finding.status) &&
-      [finding.order, finding.email, finding.product, finding.sku].some(value => value.toLowerCase().includes(term)));
+      [finding.order, finding.email, finding.product, finding.sku, finding.candidate, finding.reason].some(value => value.toLowerCase().includes(term)));
     byId('findings').innerHTML = visible.map(finding => `<tr>${reportColumns.map(([, field]) =>
-      field === 'status' ? `<td><span class="status ${finding.status === 'At risk' ? 'risk' : 'covered'}">${finding.status}</span></td>` :
+      field === 'status' ? `<td><span class="status ${finding.status === 'Covered' ? 'covered' : 'risk'}">${finding.status}</span></td>` :
         `<td>${escapeHTML(finding[field] || '—')}</td>`).join('')}</tr>`).join('') ||
       `<tr><td class="empty" colspan="${reportColumns.length}">${report.findings.length ? 'No matching rows.' : 'No paid Shopify line items matched the old app export. Check your files and mappings.'}</td></tr>`;
     byId('row-count').textContent = `Showing ${visible.length} of ${report.findings.length} rows`;

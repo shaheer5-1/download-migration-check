@@ -1,0 +1,4 @@
+﻿Order Number,Buyer Email,Product Name,SKU,Asset ID
+1001,bundle@cedar.example,Pattern PDF,PAT,new-pdf
+1002,formats@cedar.example,Pattern,,new-format-pdf
+1008,two-assets@cedar.example,Photo Bundle,BUNDLE,new-jpg

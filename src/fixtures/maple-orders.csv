@@ -1,0 +1,12 @@
+﻿Name,Email,Financial Status,Created at,Lineitem name,Lineitem sku,Lineitem quantity,Cancelled at,Refunded Amount,Id
+#1001,repeat@maple.example,paid,2025-06-15 12:00:00 -0400,Watercolor Kit,WK,1,,0.00,8900001
+#1002,repeat@maple.example,paid,2025-06-15 12:00:00 -0400,Watercolor Kit,WK,1,,0.00,8900002
+#1003,correct@maple.example,paid,2025-06-15 12:00:00 -0400,Brush Set,BS,1,,0.00,8900003
+#1004, CASE@maple.example ,paid,2025-06-15 12:00:00 -0400,"Café, été", CAFE ,1,,0.00,8900004
+#0005,zeros@maple.example,paid,2025-06-15 12:00:00 -0400,Journal,JR,1,,0.00,
+#1006-A,guest@maple.example,paid,2025-06-15 12:00:00 -0400,Layer Pack,LP,1,,0.00,
+MAP-1007,prefix@maple.example,paid,2025-06-15 12:00:00 -0400,Presets,PS,1,,0.00,
+#1008,alias+shop@maple.example,paid,2025-06-15 12:00:00 -0400,Guide,GD,1,,0.00,
+#1009,shopper@maple.example,paid,2025-06-15 12:00:00 -0400,Recipe,REC,1,,0.00,
+#1010,shopper@maple.example,paid,2025-06-15 12:00:00 -0400,Recipe,REC,1,,0.00,
+#1011,off@maple.example,paid,2025-06-15 12:00:00 -0400,Contact Sheet,CS,1,,0.00,

@@ -9,7 +9,7 @@ const newApp = (rows: string) => parseCsv('Shopify Order Number,Customer Email,P
 describe('migration audit', () => {
   it('matches normalized order numbers and products, then falls back to buyer email', () => {
     const report = audit(
-      oldApp('# 1001,wrong@example.test,Field   Guide,FG1,https://example.test/file\n,shop@example.test,Photo Kit,,'),
+      oldApp('# 1001,one@example.test,Field   Guide,FG1,https://example.test/file\n,shop@example.test,Photo Kit,,'),
       newApp('1001,,Renamed Guide,fg1\n,SHOP@example.test,Photo Kit,'),
       shopify('1001,one@example.test,Paid,FIELD GUIDE,FG1,2025-11-03\n#1002,shop@example.test,paid,photo kit,PK1,2025-11-04'),
     );

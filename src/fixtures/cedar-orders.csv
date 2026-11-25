@@ -1,0 +1,13 @@
+﻿Name,Email,Financial Status,Created at,Lineitem name,Lineitem sku,Lineitem quantity,Cancelled at,Refunded Amount,Id
+#1001,bundle@cedar.example,paid,2025-06-15 12:00:00 -0400,Pattern PDF,PAT,1,,0.00,9900001
+,,,,Pattern SVG,PAT,1,,,
+#1002,formats@cedar.example,paid,2025-06-15 12:00:00 -0400,Pattern,PDF,1,,0.00,
+,,,,Pattern,SVG,1,,,
+#1003,partial@cedar.example,partially_refunded,2025-06-15 12:00:00 -0400,Paid Download,PD,1,,15.00,
+,,,,Refunded Download,RD,1,,,
+#1004,cancel@cedar.example,paid,2025-06-15 12:00:00 -0400,Cancelled Download,CD,1,2025-06-15 12:00:00 -0400,0.00,
+#1005,refund@cedar.example,refunded,2025-06-15 12:00:00 -0400,Fully Refunded,FR,1,,15.00,
+#1006,duplicate@cedar.example,paid,2025-06-15 12:00:00 -0400,Duplicate Export Line,DUP,1,,0.00,
+#1006,duplicate@cedar.example,paid,2025-06-15 12:00:00 -0400,Duplicate Export Line,DUP,1,,0.00,
+#1007,,paid,2025-06-15 12:00:00 -0400,Anonymous Download,ANON,1,,0.00,
+#1008,two-assets@cedar.example,paid,2025-06-15 12:00:00 -0400,Photo Bundle,BUNDLE,1,,0.00,
